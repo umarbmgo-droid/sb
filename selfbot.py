@@ -4,130 +4,73 @@ import asyncio
 import os
 import json
 import time
-from typing import Optional
+import requests
+from datetime import datetime
 
 # ===== CONFIG =====
+TOKEN = os.environ.get('TOKEN')
+OWNER_ID = 361069640962801664
 PREFIX = "!"
-OWNER_ID = 361069640962801664  # Your Discord ID
 
-# ===== GET TOKENS FROM RAILWAY VARIABLES =====
-def get_tokens_from_env():
-    """Get tokens from TOKEN1, TOKEN2, TOKEN3... environment variables"""
-    tokens = []
-    i = 1
-    while True:
-        token = os.environ.get(f'TOKEN{i}')
-        if token:
-            tokens.append(token)
-            print(f"📂 Loaded TOKEN{i}")
-            i += 1
-        else:
-            break
-    
-    # Also check single TOKEN variable for backwards compatibility
-    single_token = os.environ.get('TOKEN')
-    if single_token and not tokens:
-        tokens.append(single_token)
-        print(f"📂 Loaded TOKEN (single)")
-    
-    return tokens
+if not TOKEN:
+    print("❌ ERROR: TOKEN not set in Railway Variables")
+    exit(1)
 
-# ===== BOT CLIENT CLASS =====
-class SelfbotClient:
-    def __init__(self, token, username, index):
-        self.token = token
-        self.username = username
-        self.index = index
-        self.bot = commands.Bot(command_prefix=PREFIX, intents=discord.Intents.all(), help_command=None)
-        self.is_ready = False
-        
-    async def start(self):
-        @self.bot.event
-        async def on_ready():
-            self.is_ready = True
-            print(f"✅ [{self.username}] Logged in")
-            # Set streaming status to "MAR"
-            await self.bot.change_presence(activity=discord.Streaming(
-                name="MAR",
-                url="https://www.twitch.tv/mar"
-            ))
-            print(f"🎬 [{self.username}] Status set to: STREAMING MAR")
-        
-        @self.bot.event
-        async def on_message(message):
-            if message.author.id == self.bot.user.id:
-                return
-            await self.bot.process_commands(message)
-        
-        @self.bot.command()
-        async def ping(ctx):
-            if ctx.author.id != OWNER_ID:
-                return
-            await ctx.message.delete()
-            await ctx.send(f"Pong! {round(self.bot.latency * 1000)}ms")
-        
-        @self.bot.command()
-        async def status(ctx, *, text):
-            """Change status - !status streaming MAR"""
-            if ctx.author.id != OWNER_ID:
-                return
-            await ctx.message.delete()
-            await self.bot.change_presence(activity=discord.Streaming(
-                name=text,
-                url="https://www.twitch.tv/mar"
-            ))
-            await ctx.send(f"Status changed to: {text}")
-        
-        @self.bot.command()
-        async def stats(ctx):
-            """Show connected accounts"""
-            if ctx.author.id != OWNER_ID:
-                return
-            await ctx.message.delete()
-            await ctx.send(f"Account: {self.bot.user.name} | Streaming: MAR")
-        
-        try:
-            await self.bot.start(self.token)
-        except Exception as e:
-            print(f"❌ [{self.username}] Failed: {e}")
+# ===== BOT SETUP =====
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 
-# ===== MAIN =====
-async def main():
-    tokens = get_tokens_from_env()
-    
-    if not tokens:
-        print("❌ No tokens found! Add TOKEN1, TOKEN2, etc. in Railway Variables")
-        print("\nExample:")
-        print("  TOKEN1 = your_first_token_here")
-        print("  TOKEN2 = your_second_token_here")
-        print("  TOKEN3 = your_third_token_here")
+# ===== STATUS LOOP =====
+async def status_loop():
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        await bot.change_presence(activity=discord.Streaming(
+            name="MAR",
+            url="https://www.twitch.tv/mar"
+        ))
+        await asyncio.sleep(30)
+
+# ===== EVENTS =====
+@bot.event
+async def on_ready():
+    print(f"✅ SELFBOT ONLINE: {bot.user.name}")
+    print(f"🆔 User ID: {bot.user.id}")
+    print(f"📊 Servers: {len(bot.guilds)}")
+    bot.loop.create_task(status_loop())
+
+@bot.event
+async def on_message(message):
+    if message.author.id == bot.user.id:
         return
-    
-    print(f"\n🚀 Starting {len(tokens)} selfbots...\n")
-    
-    clients = []
-    for i, token in enumerate(tokens):
-        # Get username
-        try:
-            import requests
-            headers = {'Authorization': token}
-            r = requests.get('https://discord.com/api/v9/users/@me', headers=headers)
-            if r.status_code == 200:
-                username = r.json()['username']
-            else:
-                username = f"Account_{i+1}"
-        except:
-            username = f"Account_{i+1}"
-        
-        client = SelfbotClient(token, username, i+1)
-        clients.append(client)
-        asyncio.create_task(client.start())
-        await asyncio.sleep(1.5)  # Delay between logins to avoid rate limits
-    
-    print(f"\n✅ All {len(tokens)} selfbots connected!\n")
-    
-    # Keep running
-    await asyncio.Event().wait()
+    await bot.process_commands(message)
 
+# ===== COMMANDS =====
+@bot.command()
+async def ping(ctx):
+    if ctx.author.id != OWNER_ID:
+        return
+    await ctx.message.delete()
+    await ctx.send(f"Pong! {round(bot.latency * 1000)}ms")
+
+@bot.command()
+async def status(ctx, *, text):
+    if ctx.author.id != OWNER_ID:
+        return
+    await ctx.message.delete()
+    await bot.change_presence(activity=discord.Streaming(
+        name=text,
+        url="https://www.twitch.tv/mar"
+    ))
+    await ctx.send(f"Status changed to: {text}")
+
+@bot.command()
+async def stats(ctx):
+    if ctx.author.id != OWNER_ID:
+        return
+    await ctx.message.delete()
+    await ctx.send(f"Account: {bot.user.name} | ID: {bot.user.id}")
+
+# ===== RUN =====
 if __name__ == "__main__":
-    asyncio.run(main())
+    print("🚀 Starting Selfbot...")
+    bot.run(TOKEN)
