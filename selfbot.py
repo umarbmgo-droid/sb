@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 import asyncio
 import os
 import json
@@ -9,6 +9,28 @@ from typing import Optional
 # ===== CONFIG =====
 PREFIX = "!"
 OWNER_ID = 361069640962801664  # Your Discord ID
+
+# ===== GET TOKENS FROM RAILWAY VARIABLES =====
+def get_tokens_from_env():
+    """Get tokens from TOKEN1, TOKEN2, TOKEN3... environment variables"""
+    tokens = []
+    i = 1
+    while True:
+        token = os.environ.get(f'TOKEN{i}')
+        if token:
+            tokens.append(token)
+            print(f"📂 Loaded TOKEN{i}")
+            i += 1
+        else:
+            break
+    
+    # Also check single TOKEN variable for backwards compatibility
+    single_token = os.environ.get('TOKEN')
+    if single_token and not tokens:
+        tokens.append(single_token)
+        print(f"📂 Loaded TOKEN (single)")
+    
+    return tokens
 
 # ===== BOT CLIENT CLASS =====
 class SelfbotClient:
@@ -56,40 +78,36 @@ class SelfbotClient:
             ))
             await ctx.send(f"Status changed to: {text}")
         
+        @self.bot.command()
+        async def stats(ctx):
+            """Show connected accounts"""
+            if ctx.author.id != OWNER_ID:
+                return
+            await ctx.message.delete()
+            await ctx.send(f"Account: {self.bot.user.name} | Streaming: MAR")
+        
         try:
             await self.bot.start(self.token)
         except Exception as e:
             print(f"❌ [{self.username}] Failed: {e}")
 
-# ===== LOAD TOKENS =====
-def load_tokens():
-    """Load tokens from tokens.txt file"""
-    tokens = []
-    try:
-        with open('tokens.txt', 'r') as f:
-            for line in f:
-                token = line.strip()
-                if token and not token.startswith('#'):
-                    tokens.append(token)
-        print(f"📂 Loaded {len(tokens)} tokens")
-        return tokens
-    except FileNotFoundError:
-        print("❌ tokens.txt not found!")
-        return []
-
 # ===== MAIN =====
 async def main():
-    tokens = load_tokens()
+    tokens = get_tokens_from_env()
     
     if not tokens:
-        print("No tokens found. Add tokens to tokens.txt")
+        print("❌ No tokens found! Add TOKEN1, TOKEN2, etc. in Railway Variables")
+        print("\nExample:")
+        print("  TOKEN1 = your_first_token_here")
+        print("  TOKEN2 = your_second_token_here")
+        print("  TOKEN3 = your_third_token_here")
         return
     
     print(f"\n🚀 Starting {len(tokens)} selfbots...\n")
     
     clients = []
     for i, token in enumerate(tokens):
-        # Get username preview
+        # Get username
         try:
             import requests
             headers = {'Authorization': token}
@@ -97,14 +115,16 @@ async def main():
             if r.status_code == 200:
                 username = r.json()['username']
             else:
-                username = f"Token_{i+1}"
+                username = f"Account_{i+1}"
         except:
-            username = f"Token_{i+1}"
+            username = f"Account_{i+1}"
         
         client = SelfbotClient(token, username, i+1)
         clients.append(client)
         asyncio.create_task(client.start())
-        await asyncio.sleep(1)  # Small delay between logins
+        await asyncio.sleep(1.5)  # Delay between logins to avoid rate limits
+    
+    print(f"\n✅ All {len(tokens)} selfbots connected!\n")
     
     # Keep running
     await asyncio.Event().wait()
