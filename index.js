@@ -88,4 +88,4 @@ client.on('messageCreate', async (message) => {
 
 // ===== RUN =====
 console.log("🚀 Starting Selfbot...");
-client.login(TOKEN);)
+client.login(TOKEN);
